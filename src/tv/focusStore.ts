@@ -1134,6 +1134,63 @@ class TvFocusStore {
             return offset < ref * 1.2;
         });
         let pool = aligned.length ? aligned : nearAligned;
+        if (!pool.length) {
+            // 交叉轴差得太远（例如"歌单"页签在右边、下一行的内容在左边），
+            // 上面的 nearAligned 会把它们全剔掉，实机表现就是"按下行键没反应"。
+            // 这里给四个方向一个窄口子：整块在当前元素前方、且不远的节点里，
+            // 挑交叉轴最近的一个。
+            const ahead = scoped.filter(item => {
+                switch (direction) {
+                    case "up":
+                        return (
+                            item.rect.y + item.rect.height <= current.rect.y + 12 &&
+                            current.rect.y - (item.rect.y + item.rect.height) <=
+                                screen.height * 0.5
+                        );
+                    case "down":
+                        return (
+                            item.rect.y >= current.rect.y + current.rect.height - 12 &&
+                            item.rect.y - (current.rect.y + current.rect.height) <=
+                                screen.height * 0.5
+                        );
+                    case "left":
+                        return (
+                            item.rect.x + item.rect.width <= current.rect.x + 12 &&
+                            current.rect.x - (item.rect.x + item.rect.width) <=
+                                screen.width * 0.5
+                        );
+                    default:
+                        return (
+                            item.rect.x >= current.rect.x + current.rect.width - 12 &&
+                            item.rect.x - (current.rect.x + current.rect.width) <=
+                                screen.width * 0.5
+                        );
+                }
+            });
+            if (ahead.length) {
+                const cross = direction === "left" || direction === "right";
+                const curCross = cross
+                    ? current.rect.y + current.rect.height / 2
+                    : current.rect.x + current.rect.width / 2;
+                let pick = ahead[0];
+                let pickScore = Number.POSITIVE_INFINITY;
+                ahead.forEach(item => {
+                    const candCross = cross
+                        ? item.rect.y + item.rect.height / 2
+                        : item.rect.x + item.rect.width / 2;
+                    const mainGap = cross
+                        ? Math.abs(item.rect.x - current.rect.x)
+                        : Math.abs(item.rect.y - current.rect.y);
+                    const score = Math.abs(candCross - curCross) * 1.5 + mainGap * 0.2;
+                    if (score < pickScore) {
+                        pickScore = score;
+                        pick = item;
+                    }
+                });
+                this.setFocus(pick);
+                return;
+            }
+        }
         if (!pool.length && direction === "up") {
             // 顶部工具条（返回/搜索/更多）往往在屏幕右上角，
             // 和下面内容区的 x 几乎不重叠，几何上"不属于上方候选"，
@@ -1202,7 +1259,17 @@ class TvFocusStore {
         let best: IMeasuredNode | null = null;
         let bestScore = Number.POSITIVE_INFINITY;
         for (const item of candidates) {
-            const value = this.score(current.rect, item.rect, direction);
+            let value = this.score(current.rect, item.rect, direction);
+            // 同一个列表里相邻的一项（order 相差 1）优先：列表上下移动应该一格一格走，
+            // 而不是因为交叉轴偏移算错、先落到旁边的按钮或别的区域上。
+            if (
+                item.node.order != null &&
+                current.node.order != null &&
+                item.node.scope === current.node.scope &&
+                Math.abs(item.node.order - current.node.order) === 1
+            ) {
+                value *= 0.55;
+            }
             if (value < bestScore) {
                 bestScore = value;
                 best = item;
@@ -1251,12 +1318,12 @@ class TvFocusStore {
         }
         const currentIndex = ordered.findIndex(node => node.id === this.focusedId);
         const step = direction === "up" || direction === "left" ? -1 : 1;
-        // 循环移动：边界处不要再"原地聚焦同一个节点然后返回 true"，
-        // 那会让按键看起来完全没反应
-        const nextIndex =
-            currentIndex < 0
-                ? 0
-                : (currentIndex + step + ordered.length) % ordered.length;
+        // 不要循环：走到列表最后一行再按下行，旧实现会把光环送回页面第一个元素，
+        // 用户看到的就是"按一下行键，焦点自己跳回上面"。到边界就停。
+        const nextIndex = currentIndex < 0 ? 0 : currentIndex + step;
+        if (nextIndex < 0 || nextIndex >= ordered.length) {
+            return false;
+        }
         if (nextIndex === currentIndex && ordered.length > 1) {
             return false;
         }

@@ -6,7 +6,7 @@ import useOrientation from "@/hooks/useOrientation";
 import rpx from "@/utils/rpx";
 import { TvFlashList as FlashList } from "@/tv/scroll";
 import { useAtomValue } from "jotai";
-import React, { memo, useCallback, useEffect, useState } from "react";
+import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 import useSearch from "../../hooks/useSearch";
 import { ISearchResult, queryAtom } from "../../store/atoms";
 import { renderMap } from "./results";
@@ -34,6 +34,8 @@ function ResultWrapper(props: IResultWrapperProps) {
     const ResultComponent = renderMap[tab]!;
     const data: any = searchResult?.data ?? [];
 
+    const lastLoadRef = React.useRef(0);
+
     const keyExtractor = useCallback(
         (item: any, i: number) => `${i}-${item.platform}-${item.id}`,
         [],
@@ -49,25 +51,42 @@ function ResultWrapper(props: IResultWrapperProps) {
         setSearchState(searchResult?.state ?? RequestStateCode.IDLE);
     }, [searchResult]);
 
+    // 出错自动再试一次（间隔 2.5 秒）：网络抖一下不该让整块停在"出错啦"，
+    // 以前这块一红就只能退出 App 重开。
+    const autoRetriedRef = useRef(0);
+    useEffect(() => {
+        if (searchState !== RequestStateCode.ERROR) {
+            autoRetriedRef.current = 0;
+            return;
+        }
+        if (autoRetriedRef.current >= 2) {
+            return;
+        }
+        autoRetriedRef.current += 1;
+        const timer = setTimeout(() => {
+            search(query, 1, tab, pluginHash);
+        }, 2500);
+        return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchState]);
+
     // 焦点名前缀带上 tab + 插件，避免不同页签/不同插件的列表互相抢光环
     const namePrefix = `sr:${tab}:${pluginHash}`;
 
-    // 进页面/结果回来后把光环放到第一条结果上（之前搜索结果行根本没有焦点名）
+    // 进页面/结果回来后把光环放到第一条结果上。
+    // 注意：这里以前在 260/700/1400ms 各补一次"抢焦点"，结果用户正在按方向键往下走，
+    // 1.4 秒后定时器一响，光环被打回第一行（实机看起来就是"焦点自己跳回上面"）。
+    // 现在每个页签/插件只落一次，且列表增长（翻页）时不再重置。
+    const focusedPrefixRef = useRef("");
     useEffect(() => {
         if (!data?.length) {
             return;
         }
+        if (focusedPrefixRef.current === namePrefix) {
+            return;
+        }
+        focusedPrefixRef.current = namePrefix;
         tvFocus.focusByName(`${namePrefix}:0`, true);
-        const timers = [260, 700, 1400].map(delay =>
-            setTimeout(() => {
-                const focused = tvFocus.getFocusedNode();
-                if (!focused?.debugName?.startsWith(namePrefix)) {
-                    tvFocus.focusByName(`${namePrefix}:0`, true) ||
-                        tvFocus.focusFirstInActiveLayer();
-                }
-            }, delay),
-        );
-        return () => timers.forEach(clearTimeout);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [data?.length, namePrefix]);
     useTvPageFirstFocus();
@@ -100,6 +119,13 @@ function ResultWrapper(props: IResultWrapperProps) {
                 search(query, 1, tab, pluginHash);
             }}
             onEndReached={() => {
+                // FlashList 在内容不足一屏时会连续触发 onEndReached，
+                // 每次都发一次请求 → 请求叠在一起、网络一堵就整块出错。
+                const now = Date.now();
+                if (now - lastLoadRef.current < 1200) {
+                    return;
+                }
+                lastLoadRef.current = now;
                 (searchState === RequestStateCode.PARTLY_DONE ||
                     searchState === RequestStateCode.IDLE) &&
                     search(undefined, undefined, tab, pluginHash);

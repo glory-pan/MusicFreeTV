@@ -58,6 +58,14 @@ const REPEAT_INTERVAL = 110;
  * 所以这里自己做长按连发：按住不放 → 先等 340ms，然后每 110ms 再发一次同方向按键，
  * 松手（收到 up）立刻停。方向键是唯一的连发对象，OK/菜单/媒体键不连发。
  */
+/** 最后一次遥控按键的时间（毫秒）。兜底的“自动补焦点”要先看这个，
+ *  避免用户正在连按方向键时，定时器把光环抢回页面第一个元素。 */
+export let lastKeyTs = 0;
+
+export function markKeyTs() {
+    lastKeyTs = Date.now();
+}
+
 export function subscribeTvKey(listener: (event: ITvKeyEvent) => void) {
     if (!nativeModule) {
         return () => {};
@@ -89,6 +97,7 @@ export function subscribeTvKey(listener: (event: ITvKeyEvent) => void) {
             if (!key) {
                 return;
             }
+            lastKeyTs = Date.now();
             if (event.action === "up") {
                 stopOne(key);
                 listener(event);

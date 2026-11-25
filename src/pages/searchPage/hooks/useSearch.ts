@@ -65,20 +65,24 @@ export default function useSearch() {
                 }
 
                 // 是否是一次新的搜索
-                const newSearch =
+                const newSearch = Boolean(
                     query ||
-                    prevPluginResult?.page === undefined ||
-                    queryPage === 1;
+                        prevPluginResult?.page === undefined ||
+                        queryPage === 1,
+                );
 
                 // 本次搜索关键词
                 currentQueryRef.current = query =
                     query ?? prevPluginResult?.query ?? "";
 
                 /** 搜索的页码 */
+                // 这里原来写成 `queryPage ?? newSearch ? 1 : ...`，
+                // 由于 ?? 和 ?: 的优先级，取值永远是 1 —— 也就是"加载更多"永远
+                // 重复请求第一页。列表滚到底会不停拉第一页、请求堆在一起，
+                // 网络一堵就整块变成"出错啦"，重试还是第一页，只能杀进程重开。
                 const page =
-                    queryPage ?? newSearch
-                        ? 1
-                        : (prevPluginResult?.page ?? 0) + 1;
+                    queryPage ??
+                    (newSearch ? 1 : (prevPluginResult?.page ?? 0) + 1);
 
                 trace("开始搜索", {
                     _platform,

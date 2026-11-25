@@ -14,6 +14,7 @@ import Icon from "../base/icon";
 import { iconSizeConst } from "@/constants/uiConst";
 import useColors from "@/hooks/useColors";
 import { tvFocus } from "@/tv/focusStore";
+import { lastKeyTs } from "@/tv/keyEvent";
 import { useTvPageFirstFocus } from "@/tv/firstFocus";
 
 interface IMusicListProps {
@@ -70,6 +71,10 @@ export default function MusicList(props: IMusicListProps) {
         }
         const timers = [300, 900, 1600].map(delay =>
             setTimeout(() => {
+                // 用户正在按遥控器就别抢：否则按几下键，光环会被定时器打回第一首
+                if (Date.now() - lastKeyTs < 500) {
+                    return;
+                }
                 if (tvFocus.hasVisibleFocus()) {
                     return;
                 }

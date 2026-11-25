@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { tvFocus } from "./focusStore";
+import { lastKeyTs } from "./keyEvent";
 
 /**
  * 页面级"首焦点"兜底。
@@ -16,6 +17,10 @@ export function useTvPageFirstFocus(enabled = true) {
         }
         const timers = [180, 420, 800, 1200, 1800].map(delay =>
             setTimeout(() => {
+                // 用户此刻正在按遥控器，就别抢焦点（否则会把手感变成“按一下跳回头”）
+                if (Date.now() - lastKeyTs < 500) {
+                    return;
+                }
                 if (!tvFocus.hasVisibleFocus()) {
                     tvFocus.focusFirstInActiveLayer();
                 }

@@ -29,7 +29,9 @@ export default function MusicDetail() {
         if (!currentMusic) {
             return;
         }
-        const timer = setTimeout(() => prefetchMusicVideo(currentMusic), 1200);
+        // 越早开始解析越好：用户从播放页点"视频"往往是 5~10 秒之后，
+        // 提前预取能把"正在解析 MV"这段等待吃掉大半。
+        const timer = setTimeout(() => prefetchMusicVideo(currentMusic), 300);
         return () => clearTimeout(timer);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentMusic?.id]);

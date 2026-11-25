@@ -286,24 +286,19 @@ export default function MvPlayer() {
             try {
                 // 优先用 B 站 dash 的音频流：和画面同源，快进快退/倍速才对得上
                 const cur = videoRef.current;
-                let audioUrl =
+                const audioUrl =
                     cur?.kind === "native" ? cur.audioUrl ?? "" : "";
-                let audioHeaders = cur?.headers;
+                const audioHeaders = cur?.headers;
                 if (!audioUrl) {
-                    const music = currentMusicRef.current;
-                    if (!music) {
-                        return;
+                    // 没有 B 站自己的音轨就不要再拿歌曲 mp3 顶上：
+                    // 那是另一份录音，和画面天生对不上，快进后只会更不准。
+                    if (!stopped) {
+                        setHint("这条视频没有可用音轨，已切到视频原音");
+                        setTimeout(() => setHint(""), 3000);
+                        setAudioMode("video");
+                        audioModeRef.current = "video";
                     }
-                    const plugin = pluginManager.getByMedia(music);
-                    const src: any = await plugin?.methods?.getMediaSource?.(
-                        music,
-                        "super",
-                    );
-                    if (stopped || !src?.url) {
-                        return;
-                    }
-                    audioUrl = src.url;
-                    audioHeaders = src.headers;
+                    return;
                 }
                 await tvVideo.setMvAudio(audioUrl, audioHeaders);
                 await tvVideo.mvAudioSeek(posRef.current || 0);
@@ -320,22 +315,15 @@ export default function MvPlayer() {
                 try {
                     const st: any = await tvVideo.getMvAudioStatus();
                     ticks += 1;
-                    // B 站音频流解不出来（个别盒子的 m4s 支持差）：退回歌曲音源，先保证有声
-                    if (!fallbackTried && (st?.audioError || (!st?.ready && ticks >= 4))) {
+                    // B 站音频流在这个盒子上解不出来时，不要再退回歌曲音源
+                    // （那是另一份录音，音画必然错位），直接改用视频原音：
+                    // 同一条流里的音和画，从根上就是同步的。
+                    if (!fallbackTried && (st?.audioError || (!st?.ready && ticks >= 6))) {
                         fallbackTried = true;
-                        const music = currentMusicRef.current;
-                        const plugin: any = music && pluginManager.getByMedia(music);
-                        const src: any = await plugin?.methods?.getMediaSource?.(
-                            music,
-                            "super",
-                        );
-                        if (src?.url) {
-                            await tvVideo.setMvAudio(src.url, src.headers);
-                            tvVideo.mvAudioSeek(posRef.current || 0);
-                            tvVideo.mvAudioPlay();
-                            setHint("B站音轨装载失败，已改用歌曲音源出声");
-                            setTimeout(() => setHint(""), 3500);
-                        }
+                        setHint("B站音轨在本机解不出来，已切到视频原音");
+                        setTimeout(() => setHint(""), 3500);
+                        setAudioMode("video");
+                        audioModeRef.current = "video";
                         return;
                     }
                     if (!st?.ready) {
@@ -344,14 +332,14 @@ export default function MvPlayer() {
                     if (!st.playing && !pausedRef.current) {
                         tvVideo.mvAudioPlay();
                     }
-                    if (
-                        Math.abs((st.position ?? 0) - posRef.current) > 900
-                    ) {
+                    // 音画同步校准：以前 2 秒一查、差 0.9 秒才纠，用户能明显听出
+                    // “口型和声音错半句”。改成 700ms 一查、差 150ms 就纠。
+                    if (Math.abs((st.position ?? 0) - posRef.current) > 150) {
                         tvVideo.mvAudioSeek(posRef.current);
                     }
                 } catch {}
             })();
-        }, 2000);
+        }, 700);
         return () => {
             stopped = true;
             clearInterval(timer);
@@ -379,11 +367,20 @@ export default function MvPlayer() {
                 // B 站这一路在盒子上从来没出过声（原生/内嵌都一样），默认直接用歌曲音轨，
                 // 保证「点开 MV 就有声音」；想要 UP 主原声可按 HUD 第 5 个按钮切回
                 const isBili = String((video as any).provider ?? "").indexOf("bili") >= 0;
-                setAudioMode(isBili ? "song" : "video");
-                audioModeRef.current = isBili ? "song" : "video";
-                autoSongRef.current = isBili;
-                if (isBili) {
-                    setHint("B站源默认用歌曲音轨出声（HUD 内可切回视频原音）");
+                // 关键：只有真的拿到 B 站自己的音轨（dash 的 audioUrl）才用独立配乐播放器。
+                // 拿不到就老老实实用视频原音 —— 视频自带音轨时是同一个播放器，天然同步；
+                // 以前这里无条件用"歌曲音轨"，等于把录音室 mp3 配在演唱会画面上，
+                // 内容都不同源，怎么校时都不可能对上。
+                const hasOwnAudio = !!(video as any).audioUrl;
+                const useSong = isBili && hasOwnAudio;
+                setAudioMode(useSong ? "song" : "video");
+                audioModeRef.current = useSong ? "song" : "video";
+                autoSongRef.current = useSong;
+                if (useSong) {
+                    setHint("已用B站自己的音轨出声（HUD 内可切回视频原音）");
+                    setTimeout(() => setHint(""), 4000);
+                } else if (isBili) {
+                    setHint("这条B站视频没有可用音轨，先用画面原音播放");
                     setTimeout(() => setHint(""), 4000);
                 }
                 setDiagVisible(true);
