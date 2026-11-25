@@ -562,6 +562,9 @@ class TvVideoSurface(context: ThemedReactContext) : FrameLayout(context) {
     fun releaseAudio() {
         val p = audioPlayer
         audioPlayer = null
+        // 清掉 url：否则再次 setMvAudio 相同地址会被判成「同一首」而 return，
+        // 播放器却已经是 null —— 表现就是切回音轨后再也没有声音。
+        audioUrl = null
         try {
             p?.stop()
         } catch (_: Throwable) {

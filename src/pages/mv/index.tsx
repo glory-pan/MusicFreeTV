@@ -305,6 +305,9 @@ export default function MvPlayer() {
                     const hasOwnTrack =
                         !!st && st.ready === true && (st.audioTracks ?? 0) > 0;
                     if (cur?.kind === "native" && hasOwnTrack) {
+                        try {
+                            tvVideo.mvAudioStop();
+                        } catch {}
                         if (!stopped) {
                             setHint("这条视频自带音轨，用画面原音出声");
                             setTimeout(() => setHint(""), 3000);
@@ -364,7 +367,12 @@ export default function MvPlayer() {
                     if (!st?.ready) {
                         return;
                     }
-                    if (!st.playing && !pausedRef.current) {
+                    // 暂停中：不续播、不校准 seek。暂停后还去 seek/play 就是
+                    // 用户遇到的「视频停了声音还在走」。
+                    if (pausedRef.current) {
+                        return;
+                    }
+                    if (!st.playing) {
                         tvVideo.mvAudioPlay();
                     }
                     // 音画同步校准：以前 2 秒一查、差 0.9 秒才纠，用户能明显听出
@@ -378,11 +386,9 @@ export default function MvPlayer() {
         return () => {
             stopped = true;
             clearInterval(timer);
-            if (!aliveRef.current) {
-                try {
-                    tvVideo.mvAudioStop();
-                } catch {}
-            }
+            try {
+                tvVideo.mvAudioStop();
+            } catch {}
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [audioMode, video]);
@@ -565,24 +571,25 @@ export default function MvPlayer() {
         return () => clearInterval(timer);
     }, [video]);
 
+    // 暂停/播放只认「人」的意图，不再看当前是什么音源模式。
+    // 以前这里判断 audioMode === "song" 才去停音频播放器，一旦模式被切成 video
+    // 而音频播放器还活着，就会出现「视频停住了、声音还在响，按键也管不了」。
     const doPlay = useCallback(() => {
-        tvVideo.play();
+        pausedRef.current = false;
         setPaused(false);
-        if (audioModeRef.current === "song") {
-            try {
-                tvVideo.mvAudioPlay();
-            } catch {}
-        }
+        tvVideo.play();
+        try {
+            tvVideo.mvAudioPlay();
+        } catch {}
     }, []);
 
     const doPause = useCallback(() => {
-        tvVideo.pause();
+        pausedRef.current = true;
         setPaused(true);
-        if (audioModeRef.current === "song") {
-            try {
-                tvVideo.mvAudioPause();
-            } catch {}
-        }
+        tvVideo.pause();
+        try {
+            tvVideo.mvAudioPause();
+        } catch {}
     }, []);
 
     /** 音轨切换：视频原音 ⇄ 歌曲音轨 */
