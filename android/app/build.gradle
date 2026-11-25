@@ -115,7 +115,7 @@ static def getVersion() {
 // }
 
 def appVersion = getVersion()
-def appVersionCode = 100090
+def appVersionCode = 100091
 // TV 版独立版本号，避免与原手机版互相覆盖
 def appVersionNameSuffix = ""
 

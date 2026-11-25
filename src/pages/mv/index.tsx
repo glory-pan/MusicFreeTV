@@ -286,19 +286,54 @@ export default function MvPlayer() {
             try {
                 // 优先用 B 站 dash 的音频流：和画面同源，快进快退/倍速才对得上
                 const cur = videoRef.current;
-                const audioUrl =
+                let audioUrl =
                     cur?.kind === "native" ? cur.audioUrl ?? "" : "";
-                const audioHeaders = cur?.headers;
+                let audioHeaders = cur?.headers;
+
+                // 三级策略：B站音轨（最同步）→ 视频自带音轨（同一条流，天然同步）
+                // → 实在只有画面，才用歌曲音源出声（并明确提示可能不同步）
                 if (!audioUrl) {
-                    // 没有 B 站自己的音轨就不要再拿歌曲 mp3 顶上：
-                    // 那是另一份录音，和画面天生对不上，快进后只会更不准。
-                    if (!stopped) {
-                        setHint("这条视频没有可用音轨，已切到视频原音");
-                        setTimeout(() => setHint(""), 3000);
-                        setAudioMode("video");
-                        audioModeRef.current = "video";
+                    // 等原生把流探清楚（没 ready 时 audioTracks 可能还是空的，会误判成"没音轨"）
+                    let st: any = null;
+                    for (let i = 0; i < 4; i += 1) {
+                        st = await tvVideo.getStatus().catch(() => null);
+                        if (st?.ready) {
+                            break;
+                        }
+                        await new Promise(r => setTimeout(r, 350));
                     }
-                    return;
+                    const hasOwnTrack =
+                        !!st && st.ready === true && (st.audioTracks ?? 0) > 0;
+                    if (cur?.kind === "native" && hasOwnTrack) {
+                        if (!stopped) {
+                            setHint("这条视频自带音轨，用画面原音出声");
+                            setTimeout(() => setHint(""), 3000);
+                            setAudioMode("video");
+                            audioModeRef.current = "video";
+                        }
+                        return;
+                    }
+                    // 纯画面（B站 dash 分轨或网页兜底）：拿歌曲音源顶上，至少要有声
+                    const music = currentMusicRef.current;
+                    if (!music) {
+                        return;
+                    }
+                    const plugin = pluginManager.getByMedia(music);
+                    const src: any = await plugin?.methods?.getMediaSource?.(
+                        music,
+                        "super",
+                    );
+                    if (stopped || !src?.url) {
+                        return;
+                    }
+                    audioUrl = src.url;
+                    audioHeaders = src.headers;
+                    if (!stopped) {
+                        setHint(
+                            "这条视频只有画面，已用歌曲音源出声（快进后可能不同步）",
+                        );
+                        setTimeout(() => setHint(""), 5000);
+                    }
                 }
                 await tvVideo.setMvAudio(audioUrl, audioHeaders);
                 await tvVideo.mvAudioSeek(posRef.current || 0);
@@ -389,6 +424,45 @@ export default function MvPlayer() {
             }
         }
         return undefined;
+    }, [video]);
+
+    // 没有 B 站音轨时先探画面流：确认它自己带不带音轨。
+    // 带 → 用画面原音（同一条流，天然同步）；不带 → 只能用歌曲音源出声，并如实提示不同步。
+    useEffect(() => {
+        if (!video || video.kind !== "native" || (video as any).audioUrl) {
+            return undefined;
+        }
+        let cancelled = false;
+        (async () => {
+            for (let i = 0; i < 6; i += 1) {
+                if (cancelled) {
+                    return;
+                }
+                const st: any = await tvVideo.getStatus().catch(() => null);
+                if (st?.ready) {
+                    if (
+                        !cancelled &&
+                        (st.audioTracks ?? 0) === 0 &&
+                        audioModeRef.current === "video" &&
+                        !autoSongRef.current
+                    ) {
+                        autoSongRef.current = true;
+                        audioModeRef.current = "song";
+                        setAudioMode("song");
+                        setHint(
+                            "这条视频画面没带音轨，已改用歌曲音源出声（快进后可能不同步）",
+                        );
+                        setTimeout(() => setHint(""), 5000);
+                    }
+                    return;
+                }
+                await new Promise(r => setTimeout(r, 400));
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [video]);
 
     // 进度轮询（只对原生播放有效）
