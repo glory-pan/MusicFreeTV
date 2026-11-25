@@ -11,8 +11,8 @@ import React, { useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 /** 开源地址：换用户名/仓库名只改这三行 */
-const GITHUB_PROFILE = "https://github.com/musicfree-tv";
-const PROJECT_REPO = "https://github.com/musicfree-tv/MusicFreeTV";
+const GITHUB_PROFILE = "https://github.com/glory-pan";
+const PROJECT_REPO = "https://github.com/glory-pan/MusicFreeTV";
 const UPSTREAM_REPO = "https://github.com/maotoumao/MusicFree";
 
 const SCROLL_STEP = rpx(220);
