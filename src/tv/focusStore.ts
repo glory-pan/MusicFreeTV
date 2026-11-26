@@ -1314,7 +1314,7 @@ class TvFocusStore {
      * 按名字直接落上去，不依赖坐标。
      */
     private focusMusicBar(): boolean {
-        const names = ["musicbar:play", "musicbar:cover", "musicbar:prev", "musicbar:next", "musicbar:playlist"];
+        const names = ["musicbar:cover", "musicbar:play", "musicbar:prev", "musicbar:next", "musicbar:playlist"];
         for (const nm of names) {
             if (this.focusByNameForce(nm)) {
                 return true;

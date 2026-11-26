@@ -30,6 +30,8 @@ type TVideoSource =
     | {
           kind: "native";
           url: string;
+          /** 慢网兜底：360P 合流（同样自带音轨） */
+          urlLow?: string;
           headers?: Record<string, string>;
           provider?: string;
           pageUrl?: string;
@@ -121,6 +123,7 @@ export default function MvPlayer() {
             setVideo({
                 kind: "native",
                 url: result.url,
+                urlLow: (result as any).urlLow,
                 headers: result.headers,
                 provider: result.provider,
                 pageUrl:
@@ -588,22 +591,37 @@ export default function MvPlayer() {
                 if (!cur || cur.kind !== "native") {
                     return;
                 }
-                if (reopenCountRef.current < 2) {
+                if (reopenCountRef.current < 1) {
                     reopenCountRef.current += 1;
                     reopenBusyRef.current = true;
                     try {
                         tvVideo.stop();
                     } catch {}
                     setVideo(null);
-                    setHint(
-                        `画面没有出来，正在重新加载（第 ${reopenCountRef.current} 次）…`,
-                    );
+                    setHint("画面没有出来，正在重新加载…");
                     setTimeout(() => {
                         if (!aliveRef.current) {
                             return;
                         }
                         setVideo({ ...cur });
                     }, 1200);
+                    return;
+                }
+                // 1080P 在慢网下起播太慢：换 360P 合流，先把画面放出来
+                if (cur.urlLow && cur.url !== cur.urlLow) {
+                    reopenCountRef.current += 1;
+                    reopenBusyRef.current = true;
+                    try {
+                        tvVideo.stop();
+                    } catch {}
+                    setVideo(null);
+                    setHint("1080P 拉不动，已切 360P 流畅版");
+                    setTimeout(() => {
+                        if (!aliveRef.current) {
+                            return;
+                        }
+                        setVideo({ ...cur, url: cur.urlLow as string, urlLow: "" });
+                    }, 800);
                     return;
                 }
                 // 重建两次还是黑的：有网页地址就切内嵌，没有就让用户重试

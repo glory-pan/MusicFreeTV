@@ -94,6 +94,8 @@ function MusicBar() {
                     ]}>
                     <TvFocusable
                         name="musicbar:cover"
+                        focusRadius={rpx(16)}
+                        rightName="musicbar:prev"
                         focusOrder={0}
                         style={style.infoArea}
                         onPress={() => {
@@ -104,6 +106,9 @@ function MusicBar() {
                     <View style={style.actionGroup}>
                         <TvFocusable
                             name="musicbar:prev"
+                            focusRadius={rpx(999)}
+                            leftName="musicbar:cover"
+                            rightName="musicbar:play"
                             focusOrder={1}
                             style={style.actionButton}
                             onPress={() => {
@@ -118,6 +123,9 @@ function MusicBar() {
                         </TvFocusable>
                         <TvFocusable
                             name="musicbar:play"
+                            focusRadius={rpx(999)}
+                            leftName="musicbar:prev"
+                            rightName="musicbar:next"
                             focusOrder={2}
                             style={style.actionButton}
                             onPress={() => {
@@ -136,6 +144,9 @@ function MusicBar() {
                         </TvFocusable>
                         <TvFocusable
                             name="musicbar:next"
+                            focusRadius={rpx(999)}
+                            leftName="musicbar:play"
+                            rightName="musicbar:playlist"
                             focusOrder={3}
                             style={style.actionButton}
                             onPress={() => {
@@ -150,6 +161,8 @@ function MusicBar() {
                         </TvFocusable>
                         <TvFocusable
                             name="musicbar:playlist"
+                            focusRadius={rpx(999)}
+                            leftName="musicbar:next"
                             focusOrder={4}
                             style={style.actionButton}
                             onPress={() => {
