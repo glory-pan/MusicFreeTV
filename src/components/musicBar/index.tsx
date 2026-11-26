@@ -1,5 +1,5 @@
 import React, { memo, useEffect, useState } from "react";
-import { Keyboard, StyleSheet, View } from "react-native";
+import { Keyboard, Pressable, StyleSheet, View } from "react-native";
 import rpx from "@/utils/rpx";
 import { CircularProgressBase } from "react-native-circular-progress-indicator";
 
@@ -11,7 +11,6 @@ import TrackPlayer, { useCurrentMusic, useMusicState, useProgress } from "@/core
 import { musicIsPaused } from "@/utils/trackUtils";
 import MusicInfo from "./musicInfo";
 import Icon from "@/components/base/icon.tsx";
-import { TvFocusable } from "@/tv/components";
 import { ROUTE_PATH, useNavigate } from "@/core/router";
 
 function CircularPlayBtn() {
@@ -92,26 +91,15 @@ function MusicBar() {
                             paddingRight: safeAreaInsets.right + rpx(24),
                         },
                     ]}>
-                    <TvFocusable
-                        name="musicbar:cover"
-                        noRing
-                        focusBackground="rgba(255,255,255,0.16)"
-                        rightName="musicbar:prev"
-                        focusOrder={0}
+                    <Pressable
                         style={style.infoArea}
                         onPress={() => {
                             navigate(ROUTE_PATH.MUSIC_DETAIL);
                         }}>
                         <MusicInfo musicItem={musicItem} />
-                    </TvFocusable>
+                    </Pressable>
                     <View style={style.actionGroup}>
-                        <TvFocusable
-                            name="musicbar:prev"
-                            noRing
-                            focusBackground="rgba(255,255,255,0.2)"
-                            leftName="musicbar:cover"
-                            rightName="musicbar:play"
-                            focusOrder={1}
+                        <Pressable
                             style={style.actionButton}
                             onPress={() => {
                                 TrackPlayer.skipToPrevious();
@@ -122,14 +110,8 @@ function MusicBar() {
                                 size={rpx(52)}
                                 color={colors.musicBarText}
                             />
-                        </TvFocusable>
-                        <TvFocusable
-                            name="musicbar:play"
-                            noRing
-                            focusBackground="rgba(255,255,255,0.2)"
-                            leftName="musicbar:prev"
-                            rightName="musicbar:next"
-                            focusOrder={2}
+                        </Pressable>
+                        <Pressable
                             style={style.actionButton}
                             onPress={() => {
                                 if (musicIsPaused(musicState)) {
@@ -144,14 +126,8 @@ function MusicBar() {
                                 size={rpx(52)}
                                 color={colors.musicBarText}
                             />
-                        </TvFocusable>
-                        <TvFocusable
-                            name="musicbar:next"
-                            noRing
-                            focusBackground="rgba(255,255,255,0.2)"
-                            leftName="musicbar:play"
-                            rightName="musicbar:playlist"
-                            focusOrder={3}
+                        </Pressable>
+                        <Pressable
                             style={style.actionButton}
                             onPress={() => {
                                 TrackPlayer.skipToNext();
@@ -162,13 +138,8 @@ function MusicBar() {
                                 size={rpx(52)}
                                 color={colors.musicBarText}
                             />
-                        </TvFocusable>
-                        <TvFocusable
-                            name="musicbar:playlist"
-                            noRing
-                            focusBackground="rgba(255,255,255,0.2)"
-                            leftName="musicbar:next"
-                            focusOrder={4}
+                        </Pressable>
+                        <Pressable
                             style={style.actionButton}
                             onPress={() => {
                                 showPanel("PlayList");
@@ -179,7 +150,7 @@ function MusicBar() {
                                 size={rpx(56)}
                                 color={colors.musicBarText}
                             />
-                        </TvFocusable>
+                        </Pressable>
                     </View>
                 </View>
             )}

@@ -1090,9 +1090,6 @@ class TvFocusStore {
         }
         if (!directionals.length) {
             // 已经到底了：下方没有任何候选，先试底部播放条
-            if (direction === "down" && this.focusMusicBar()) {
-                return;
-            }
             if (this.strictScope() && this.moveByOrder(direction, layer)) {
                 return;
             }
@@ -1230,9 +1227,6 @@ class TvFocusStore {
         }
         if (!pool.length) {
             // 候选池空了：如果用户按的是下行，先给底部播放条一个机会
-            if (direction === "down" && this.focusMusicBar()) {
-                return;
-            }
             // 该方向上确实没有相邻元素：测量正常时保持焦点不动；
             // 测量大面积失败时改走顺序导航，避免"整页按键都像坏了"
             if (this.strictScope() && this.moveByOrder(direction, layer)) {
@@ -1305,22 +1299,6 @@ class TvFocusStore {
                 this.nodeOfCurrentRoute(node),
         ).length;
         return registered >= 3 && measuredCount <= 2;
-    }
-
-    /**
-     * 底部迷你播放条（musicbar:*）的显式兜底。
-     * 它贴在屏幕最下沿、又常被列表容器压边，几何测量容易只测到一条残影甚至测不到，
-     * 结果就是「列表最后一行按下行键，光环死活去不到播放条」。
-     * 按名字直接落上去，不依赖坐标。
-     */
-    private focusMusicBar(): boolean {
-        const names = ["musicbar:cover", "musicbar:play", "musicbar:prev", "musicbar:next", "musicbar:playlist"];
-        for (const nm of names) {
-            if (this.focusByNameForce(nm)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private moveByOrder(direction: Direction, layer: number): boolean {
