@@ -29,6 +29,8 @@ const WEB_UA =
 type TVideoSource =
     | {
           kind: "native";
+          /** 合流 mp4：画面与 B 站原音在同一文件里，天然同步，不需要独立音频播放器 */
+          merged?: boolean;
           url: string;
           /** 慢网兜底：360P 合流（同样自带音轨） */
           urlLow?: string;
@@ -73,6 +75,9 @@ export default function MvPlayer() {
     const [audioMode, setAudioMode] = useState<"video" | "song">("video");
     const audioModeRef = useRef<"video" | "song">("video");
     const autoSongRef = useRef(false);
+    // 合流 mp4（画面+原音同文件）：这台盒子的 MediaPlayer 读不到 trackInfo，
+    // 靠 trackInfo 判断"有没有音轨"会一律误判成 0 条，于是错切歌曲音源、声音一卡一卡。
+    const mergedRef = useRef(false);
     // 内嵌网页（B 站播放页）同样没声：页面静音，改用歌曲音轨
     const webSongRef = useRef(false);
     const posRef = useRef(0);
@@ -123,6 +128,11 @@ export default function MvPlayer() {
             setVideo({
                 kind: "native",
                 url: result.url,
+                // 插件会带 merged；老插件没带时靠后缀兜底判断（合流是 .mp4，dash 分轨是 .m4s）
+                merged:
+                    !!(result as any).merged ||
+                    (!(result as any).audioUrl &&
+                        /\.mp4(\?|$)/.test(String(result.url ?? ""))),
                 urlLow: (result as any).urlLow,
                 headers: result.headers,
                 provider: result.provider,
@@ -371,6 +381,7 @@ export default function MvPlayer() {
         })();
         let fallbackTried = false;
         let ticks = 0;
+        let lastSeekTs = 0;
         const timer = setInterval(() => {
             if (!aliveRef.current || audioModeRef.current !== "song") {
                 return;
@@ -431,12 +442,14 @@ export default function MvPlayer() {
                     }
                     // 音画同步校准：以前 2 秒一查、差 0.9 秒才纠，用户能明显听出
                     // “口型和声音错半句”。改成 700ms 一查、差 150ms 就纠。
-                    if (Math.abs((st.position ?? 0) - posRef.current) > 150) {
+                    const drift = Math.abs((st.position ?? 0) - posRef.current);
+                    if (drift > 600 && Date.now() - lastSeekTs > 2500) {
+                        lastSeekTs = Date.now();
                         tvVideo.mvAudioSeek(posRef.current);
                     }
                 } catch {}
             })();
-        }, 700);
+        }, 1200);
         return () => {
             stopped = true;
             clearInterval(timer);
@@ -466,13 +479,19 @@ export default function MvPlayer() {
                 // 拿不到就老老实实用视频原音 —— 视频自带音轨时是同一个播放器，天然同步；
                 // 以前这里无条件用"歌曲音轨"，等于把录音室 mp3 配在演唱会画面上，
                 // 内容都不同源，怎么校时都不可能对上。
+                const isMerged = !!(video as any).merged;
+                mergedRef.current = isMerged;
                 const hasOwnAudio = !!(video as any).audioUrl;
-                const useSong = isBili && hasOwnAudio;
+                // 合流源本身就是"一条流里带原音"，绝不另起音频播放器
+                const useSong = !isMerged && isBili && hasOwnAudio;
                 setAudioMode(useSong ? "song" : "video");
                 audioModeRef.current = useSong ? "song" : "video";
                 autoSongRef.current = useSong;
                 if (useSong) {
                     setHint("已用B站自己的音轨出声（HUD 内可切回视频原音）");
+                    setTimeout(() => setHint(""), 4000);
+                } else if (isMerged) {
+                    setHint("用B站原音播放（音画同一个文件，快进也不会错位）");
                     setTimeout(() => setHint(""), 4000);
                 } else if (isBili) {
                     setHint("这条B站视频没有可用音轨，先用画面原音播放");
@@ -489,7 +508,12 @@ export default function MvPlayer() {
     // 没有 B 站音轨时先探画面流：确认它自己带不带音轨。
     // 带 → 用画面原音（同一条流，天然同步）；不带 → 只能用歌曲音源出声，并如实提示不同步。
     useEffect(() => {
-        if (!video || video.kind !== "native" || (video as any).audioUrl) {
+        if (
+            !video ||
+            video.kind !== "native" ||
+            (video as any).audioUrl ||
+            (video as any).merged
+        ) {
             return undefined;
         }
         let cancelled = false;
@@ -566,6 +590,7 @@ export default function MvPlayer() {
             // 画面流里没有音轨（B 站 dash 纯画面 / UP 主静音版）：不再去换源碰运气，
             // 直接把视频静音、用歌曲自己的音轨出声 —— 歌曲播放这条路是确定能出声的
             if (
+                !mergedRef.current &&
                 (result as any).trackReadable === true &&
                 (result as any).audioTracks === 0 &&
                 (result.duration ?? 0) > 0 &&
@@ -663,6 +688,11 @@ export default function MvPlayer() {
 
     /** 音轨切换：视频原音 ⇄ 歌曲音轨 */
     const toggleAudioMode = useCallback(() => {
+        if (mergedRef.current) {
+            setHint("这条MV是合流文件，画面和原音本来就在一起，不用切音轨");
+            setTimeout(() => setHint(""), 2500);
+            return;
+        }
         setAudioMode(prev => {
             const next = prev === "song" ? "video" : "song";
             audioModeRef.current = next;
@@ -1138,7 +1168,8 @@ export default function MvPlayer() {
                                     status.audioFormat || "音轨参数未知"
                                 } · 声音：${
                                     audioMode === "song" ? "歌曲音轨" : "视频原音"
-                                }${
+                                }${mergedRef.current ? " · 合流" : ""}${
+                                    !mergedRef.current &&
                                     status.trackReadable === true &&
                                     status.audioTracks === 0
                                         ? " · 视频流无音轨"
@@ -1252,7 +1283,9 @@ export default function MvPlayer() {
                             status.videoTracks ?? "?"
                         } 条 · ${status.audioFormat || "-"} · 音量 ${
                             status.streamVolume ?? "-"
-                        }/15 · ${audioMode === "song" ? "歌曲音轨" : "视频原音"}`}
+                        }/15 · ${audioMode === "song" ? "歌曲音轨" : "视频原音"}${
+                            mergedRef.current ? " · 合流" : ""
+                        }`}
                     </Text>
                 </View>
             ) : null}
