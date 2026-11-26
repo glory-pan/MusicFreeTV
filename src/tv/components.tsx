@@ -390,7 +390,7 @@ export const TvTouchableOpacity = forwardRef<any, any>(
                     opacity: activeOpacity,
                 })}>
                 {children}
-                {isFocused ? <TvFocusBorder radius={focusRadius} /> : null}
+                {isFocused ? <TvFocusBorder /> : null}
             </RNPressable>
         );
     },
@@ -500,6 +500,10 @@ export function TvFocusable(props: {
     downName?: string;
     /** 焦点光环圆角：贴边的小按钮传一个较大值会变成胶囊形，看起来更协调 */
     focusRadius?: number;
+    /** 不要焦点框，改成聚焦时垫一层淡色底（图标按钮上更干净） */
+    noRing?: boolean;
+    /** 配 noRing 用的底色 */
+    focusBackground?: string;
 }) {
     const {
         children,
@@ -514,6 +518,8 @@ export function TvFocusable(props: {
         upName,
         downName,
         focusRadius,
+        noRing,
+        focusBackground,
     } = props;
     const innerRef = useRef<any>(null);
     const { isFocused } = useTvFocusable({
@@ -532,9 +538,17 @@ export function TvFocusable(props: {
     return (
         <View
             ref={innerRef}
-            style={[style, isFocused ? focusedStyle : null]}>
+            style={[
+                style,
+                isFocused ? focusedStyle : null,
+                isFocused && noRing && focusBackground
+                    ? { backgroundColor: focusBackground, borderRadius: 999 }
+                    : null,
+            ]}>
             {children}
-            {isFocused ? <TvFocusBorder /> : null}
+            {isFocused && !noRing ? (
+                <TvFocusBorder radius={focusRadius} />
+            ) : null}
         </View>
     );
 }
