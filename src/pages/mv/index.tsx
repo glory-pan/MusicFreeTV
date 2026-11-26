@@ -99,6 +99,9 @@ export default function MvPlayer() {
     const webRef = useRef<any>(null);
     const videoRef = useRef<TVideoSource | null>(null);
     const pausedRef = useRef(false);
+    // B站音频流在个别盒子上解不出来（code=1 / -1004 之类）。
+    // 记住失败过的地址，切音轨时不再反复撞同一堵墙，直接走歌曲音源。
+    const failedAudioRef = useRef<string>("");
     const hudRef = useRef(false);
     const wasPlayingRef = useRef(false);
     const songPausedByMvRef = useRef(false);
@@ -282,13 +285,15 @@ export default function MvPlayer() {
             return;
         }
         let stopped = false;
+        // 提到 effect 作用域：下面的校准定时器也要读到当前音频地址
+        let audioUrl = "";
+        let audioHeaders: any;
         (async () => {
             try {
                 // 优先用 B 站 dash 的音频流：和画面同源，快进快退/倍速才对得上
                 const cur = videoRef.current;
-                let audioUrl =
-                    cur?.kind === "native" ? cur.audioUrl ?? "" : "";
-                let audioHeaders = cur?.headers;
+                audioUrl = cur?.kind === "native" ? cur.audioUrl ?? "" : "";
+                audioHeaders = cur?.headers;
 
                 // 三级策略：B站音轨（最同步）→ 视频自带音轨（同一条流，天然同步）
                 // → 实在只有画面，才用歌曲音源出声（并明确提示可能不同步）
@@ -338,6 +343,24 @@ export default function MvPlayer() {
                         setTimeout(() => setHint(""), 5000);
                     }
                 }
+                if (audioUrl && failedAudioRef.current === audioUrl) {
+                    // 这条 B站音轨已经确认在本机解不出来：改播歌曲音源，至少要有声
+                    const music = currentMusicRef.current;
+                    const plugin = music
+                        ? pluginManager.getByMedia(music)
+                        : null;
+                    const src: any = music
+                        ? await plugin?.methods?.getMediaSource?.(music, "super")
+                        : null;
+                    if (!stopped && src?.url) {
+                        audioUrl = src.url;
+                        audioHeaders = src.headers;
+                        setHint(
+                            "B站音轨在本机解不出来，这台机器改用歌曲音源出声（快进后可能不同步）",
+                        );
+                        setTimeout(() => setHint(""), 5000);
+                    }
+                }
                 await tvVideo.setMvAudio(audioUrl, audioHeaders);
                 await tvVideo.mvAudioSeek(posRef.current || 0);
                 await tvVideo.mvAudioPlay();
@@ -356,10 +379,38 @@ export default function MvPlayer() {
                     // B 站音频流在这个盒子上解不出来时，不要再退回歌曲音源
                     // （那是另一份录音，音画必然错位），直接改用视频原音：
                     // 同一条流里的音和画，从根上就是同步的。
-                    if (!fallbackTried && (st?.audioError || (!st?.ready && ticks >= 6))) {
+                    // 6 拍（约 4 秒）就判死太急了：慢网下 3~4MB 的音频流还没准备好，
+                    // 会被误判成"解不出来"。放宽到 20 拍（约 14 秒）。
+                    if (
+                        !fallbackTried &&
+                        (st?.audioError || (!st?.ready && ticks >= 20))
+                    ) {
                         fallbackTried = true;
-                        setHint("B站音轨在本机解不出来，已切到视频原音");
+                        failedAudioRef.current = audioUrl || "";
+                        const music = currentMusicRef.current;
+                        const plugin = music
+                            ? pluginManager.getByMedia(music)
+                            : null;
+                        const songSrc: any = music
+                            ? await plugin?.methods?.getMediaSource?.(music, "super")
+                            : null;
+                        if (songSrc?.url) {
+                            setHint(
+                                `B站音轨解不出来${st?.audioError ? `（${st.audioError}）` : ""}，改用歌曲音源出声（可能与画面不同步）`,
+                            );
+                            setTimeout(() => setHint(""), 5000);
+                            await tvVideo.setMvAudio(songSrc.url, songSrc.headers);
+                            await tvVideo.mvAudioSeek(posRef.current || 0);
+                            await tvVideo.mvAudioPlay();
+                            ticks = 0;
+                            return;
+                        }
+                        // 连歌曲音源都拿不到，才退回画面原音
+                        setHint("这条视频没有可用音轨，已切到画面原音");
                         setTimeout(() => setHint(""), 3500);
+                        try {
+                            tvVideo.mvAudioStop();
+                        } catch {}
                         setAudioMode("video");
                         audioModeRef.current = "video";
                         return;
