@@ -21,6 +21,8 @@ import { qualityKeys } from "@/utils/qualities";
 import rpx from "@/utils/rpx";
 import { LYRIC_TEXT_COLORS, LYRIC_BG_COLORS } from "./lyricColorPalette";
 import Toast from "@/utils/toast";
+import { checkUpdateAndShowResult } from "@/hooks/useCheckUpdate";
+import DeviceInfo from "react-native-device-info";
 import Clipboard from "@react-native-clipboard/clipboard";
 import Slider from "@react-native-community/slider";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -164,6 +166,17 @@ export default function BasicSetting() {
         {
             title: t("basicSettings.common"),
             data: [
+                {
+                    title: "检查更新",
+                    right: (
+                        <ThemeText style={styles.centerText}>
+                            {`${DeviceInfo.getVersion()} (${DeviceInfo.getBuildNumber()})`}
+                        </ThemeText>
+                    ),
+                    onPress: () => {
+                        checkUpdateAndShowResult(true);
+                    },
+                },
                 createRadio(
                     t("basicSettings.maxHistoryLength"),
                     "basic.maxHistoryLen",

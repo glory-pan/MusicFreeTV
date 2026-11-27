@@ -15,6 +15,8 @@ import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import { TvPressable as Pressable } from "@/tv/components";
 import { useSheetsBase } from "@/core/musicSheet";
+import musicHistory from "@/core/musicHistory";
+import { musicHistorySheetId } from "@/constants/commonConst";
 import { editingMusicListAtom, musicListChangedAtom } from "../store/atom";
 
 export default function Bottom() {
@@ -43,6 +45,10 @@ export default function Bottom() {
             sheets.some(_ => _.id === (musicSheet as any).id),
         [musicSheet?.id, sheets],
     );
+
+    // 播放记录也是一份"本机自己存着的列表"，同样可以单条删除
+    const isHistorySheet = musicSheet?.id === musicHistorySheetId;
+    const canDelete = isLocalSheet || isHistorySheet;
 
     const nothingSelected = selectedItems.length === 0;
 
@@ -95,16 +101,29 @@ export default function Bottom() {
                     }
                 }}
             />
-            {isLocalSheet ? (
+            {canDelete ? (
                 <BottomIcon
                     icon="trash-outline"
                     title={t("common.delete")}
                     disabled={nothingSelected}
                     onPress={() => {
-                        if (selectedItems.length) {
-                            setEditingMusicList(
-                                produce(prev => prev.filter(_ => !_.checked)),
+                        if (!selectedItems.length) {
+                            return;
+                        }
+                        const remain = editingMusicList
+                            .filter(_ => !_.checked)
+                            .map(_ => _.musicItem);
+                        setEditingMusicList(
+                            produce(prev => prev.filter(_ => !_.checked)),
+                        );
+                        if (isHistorySheet) {
+                            // 播放记录没有"保存"这一步，删完直接落盘
+                            musicHistory.setHistory(remain);
+                            setMusicListChanged(false);
+                            Toast.success(
+                                `已删除 ${selectedItems.length} 条播放记录`,
                             );
+                        } else {
                             setMusicListChanged(true);
                             Toast.warn(t("toast.rememberToSave"));
                         }
@@ -160,9 +179,9 @@ const style = StyleSheet.create({
     },
 
     bottomIconWrapper: {
-        width: rpx(296),
+        width: rpx(240),
         height: rpx(116),
-        marginHorizontal: rpx(16),
+        marginHorizontal: rpx(12),
         borderRadius: rpx(18),
         alignItems: "center",
         justifyContent: "center",

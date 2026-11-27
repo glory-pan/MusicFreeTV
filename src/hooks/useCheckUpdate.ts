@@ -2,7 +2,7 @@ import { showDialog } from "@/components/dialogs/useDialog";
 import PersistStatus from "@/utils/persistStatus";
 import checkUpdate from "@/utils/checkUpdate";
 import Toast from "@/utils/toast";
-import { compare } from "compare-versions";
+
 import { useEffect } from "react";
 import i18n from "@/core/i18n";
 
@@ -15,18 +15,16 @@ export const checkUpdateAndShowResult = (
             const { data } = updateInfo;
             const skipVersion = PersistStatus.get("app.skipVersion");
             console.log(skipVersion, data);
-            if (
-                checkSkip &&
-                skipVersion &&
-                compare(skipVersion, data.version, ">=")
-            ) {
+            if (checkSkip && skipVersion && skipVersion === data.version) {
                 return;
             }
             showDialog("DownloadDialog", {
                 version: data.version,
                 content: data.changeLog,
-                fromUrl: data.download[0],
+                fromUrl: data.download[0] ?? data.pageUrl ?? "",
                 backUrl: data.download[1],
+                apkUrl: data.apkUrl ?? data.download[0],
+                apkName: data.apkName,
             });
         } else {
             if (showToast) {

@@ -42,6 +42,8 @@ class TvVideoSurface(context: ThemedReactContext) : FrameLayout(context) {
     private var paused = false
     private var speed = 1f
     private var pendingSeekMs = -1
+    /** 这条流是否已经自然播到结尾（播完 → JS 自动接下一首 MV） */
+    private var completed = false
 
     init {
         setBackgroundColor(android.graphics.Color.BLACK)
@@ -199,6 +201,7 @@ class TvVideoSurface(context: ThemedReactContext) : FrameLayout(context) {
                 mp.setVolume(v0, v0)
             } catch (_: Throwable) {
             }
+            completed = false
             if (headers.isNotEmpty()) {
                 mp.setDataSource(context, Uri.parse(url), headers)
             } else {
@@ -237,6 +240,11 @@ class TvVideoSurface(context: ThemedReactContext) : FrameLayout(context) {
                 startFirstFrameWatchdog()
             }
             mp.setOnVideoSizeChangedListener { _, _, _ -> applyScale() }
+            mp.setOnCompletionListener { p ->
+                if (player === p) {
+                    completed = true
+                }
+            }
             mp.setOnErrorListener { _, what, extra ->
                 // 带自定义头（B 站要 Referer）时个别盒子会直接 code=-38：
                 // 先去掉头重试一次，还不行再交给 JS 切内嵌播放
@@ -379,6 +387,7 @@ class TvVideoSurface(context: ThemedReactContext) : FrameLayout(context) {
     }
 
     fun seekTo(ms: Int) {
+        completed = false
         val p = player
         if (p == null) {
             pendingSeekMs = ms
@@ -417,6 +426,7 @@ class TvVideoSurface(context: ThemedReactContext) : FrameLayout(context) {
             map["audioTracks"] = audioTrackCount(p)
             map["videoTracks"] = videoTrackCount(p)
             map["trackReadable"] = trackReadable(p)
+            map["completed"] = completed
             map["muted"] = muted
             map["volume"] = audioVolume
             map["audioFormat"] = audioFormatText(p)

@@ -9,6 +9,7 @@ import LinkText from "@/components/base/linkText";
 import useCheckUpdate from "@/hooks/useCheckUpdate.ts";
 import useOrientation from "@/hooks/useOrientation";
 import Divider from "@/components/base/divider";
+import DeviceInfo from "react-native-device-info";
 
 export default function AboutSetting() {
     const checkAndShowResult = useCheckUpdate();
@@ -38,6 +39,16 @@ export default function AboutSetting() {
                         style={style.image}
                         resizeMode="contain"
                     />
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={style.updateBtn}
+                    onPress={() => {
+                        checkAndShowResult(true);
+                    }}>
+                    <ThemeText fontColor="primary" style={style.margin}>
+                        检查更新（当前版本 v{DeviceInfo.getVersion()} (
+                        {DeviceInfo.getBuildNumber()})）
+                    </ThemeText>
                 </TouchableOpacity>
                 <ThemeText style={style.margin}>软件作者: 猫头猫</ThemeText>
                 <ThemeText style={style.margin}>
@@ -146,6 +157,10 @@ export default function AboutSetting() {
 }
 
 const style = StyleSheet.create({
+    updateBtn: {
+        paddingVertical: rpx(10),
+        paddingHorizontal: rpx(16),
+    },
     wrapper: {
         width: "100%",
         flex: 1,

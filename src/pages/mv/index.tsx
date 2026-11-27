@@ -64,6 +64,8 @@ export default function MvPlayer() {
     const [status, setStatus] = useState<{
         position: number;
         duration: number;
+        /** 画面已经播到结尾（原生 onCompletion） */
+        completed?: boolean;
         hasAudio?: boolean;
         audioFormat?: string;
         streamVolume?: number;
@@ -75,6 +77,10 @@ export default function MvPlayer() {
     const [audioMode, setAudioMode] = useState<"video" | "song">("video");
     const audioModeRef = useRef<"video" | "song">("video");
     const autoSongRef = useRef(false);
+    // MV 播完自动接下一首（同一份播放列表，画面对应下一首歌的 MV）
+    const autoNextRef = useRef(false);
+    // 连续"没有 MV"自动跳歌的次数（防止整张列表都没 MV 时无限转圈）
+    const mvSkipRef = useRef(0);
     // 合流 mp4（画面+原音同文件）：这台盒子的 MediaPlayer 读不到 trackInfo，
     // 靠 trackInfo 判断"有没有音轨"会一律误判成 0 条，于是错切歌曲音源、声音一卡一卡。
     const mergedRef = useRef(false);
@@ -124,6 +130,7 @@ export default function MvPlayer() {
         (currentMusic as any)?.title ?? currentTitleRef.current;
     currentMusicRef.current = currentMusic;
     const applyResult = useCallback((result: any) => {
+        mvSkipRef.current = 0;
         if (result?.url) {
             setVideo({
                 kind: "native",
@@ -233,6 +240,21 @@ export default function MvPlayer() {
                     return;
                 }
             } catch {}
+            // 这首没有 MV：按用户要求直接往下换，直到找到一只有 MV 的歌
+            if (mvSkipRef.current < 8) {
+                mvSkipRef.current += 1;
+                setLoading(false);
+                setHint(
+                    `《${music.title ?? ""}》没有能播的MV，自动换下一首…`,
+                );
+                try {
+                    await TrackPlayer.skipToNext();
+                } catch {
+                    setHint("列表里已经没有带MV的歌曲了");
+                    setTimeout(() => setHint(""), 4000);
+                }
+                return;
+            }
             setLoading(false);
             setHint(
                 `没有拿到《${music.title ?? ""}》的 MV：${
@@ -559,6 +581,31 @@ export default function MvPlayer() {
             if (!result || !aliveRef.current) {
                 return;
             }
+            // 先判断"是不是已经播到结尾"：RK 盒子很多流播到底会直接抛 error（EOF
+            // 被当成解码失败），如果只看 error 就会把"播完了"错判成"解不了"，
+            // 于是永远接不上下一首。
+            const posNow = result.position ?? 0;
+            const durNow = result.duration ?? 0;
+            const reachedEnd =
+                (result as any).completed === true ||
+                (durNow > 3000 &&
+                    posNow > 0 &&
+                    posNow >= durNow - 1500 &&
+                    !result.playing);
+            if (reachedEnd && !autoNextRef.current) {
+                autoNextRef.current = true;
+                setHint("这一首MV播完了，正在播下一首");
+                setTimeout(() => setHint(""), 3500);
+                TrackPlayer.skipToNext()
+                    .catch(() => {
+                        setHint("已经是列表最后一首了");
+                        setTimeout(() => setHint(""), 3000);
+                    })
+                    .finally(() => {
+                        autoNextRef.current = false;
+                    });
+                return;
+            }
             if (result.error) {
                 // 原生解码不了（B 站部分稿件 code=-38）：直接切内嵌播放页
                 const current = videoRef.current;
@@ -580,6 +627,7 @@ export default function MvPlayer() {
             setStatus({
                 position: result.position ?? 0,
                 duration: result.duration ?? 0,
+                completed: (result as any).completed === true,
                 hasAudio: (result as any).hasAudio,
                 audioFormat: (result as any).audioFormat,
                 streamVolume: (result as any).streamVolume,
@@ -822,6 +870,7 @@ export default function MvPlayer() {
         reopenCountRef.current = 0;
         reopenBusyRef.current = false;
         attemptRef.current = 0;
+        autoNextRef.current = false;
         setVideo(null);
         setStatus({ position: 0, duration: 0 });
         setPaused(false);

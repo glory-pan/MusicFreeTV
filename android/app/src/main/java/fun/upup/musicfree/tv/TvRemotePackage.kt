@@ -12,6 +12,7 @@ class TvRemotePackage : ReactPackage {
             TvQrServerModule(reactContext),
             TvEqualizerModule(reactContext),
             TvVideoModule(reactContext),
+            TvUpdaterModule(reactContext),
         )
 
     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
